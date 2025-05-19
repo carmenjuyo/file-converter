@@ -49,8 +49,7 @@ if uploaded_files:
         st.markdown(f"### Sheets in {uploaded_file.name}")
         selected_sheets = []
         for sheet in xls.sheet_names:
-            checked = st.checkbox(f"{sheet} (from {uploaded_file.name})", value=True, key=f"{file_name}_{sheet}")
-            if checked:
+            if st.checkbox(f"{sheet} (from {uploaded_file.name})", value=True, key=f"{file_name}_{sheet}"):
                 selected_sheets.append(sheet)
 
         for sheet_name in selected_sheets:
