@@ -59,24 +59,25 @@ if uploaded_files:
 
             if field_mode == "Single Cell":
                 cell_ref = st.text_input(f"Excel-style cell (e.g., E25) for {label}", key=f"cell_{i}")
-                row_start, row_end = None, None
+                row_start, row_end, until_end = None, None, False
             else:
                 column_letter = st.text_input(f"Column letter for range (e.g., E) for {label}", key=f"col_{i}")
                 row_start = st.number_input(f"Start row", value=26, min_value=1, step=1, key=f"row_start_{i}")
-                row_end = st.number_input(f"End row", value=37, min_value=1, step=1, key=f"row_end_{i}")
+                until_end = st.checkbox(f"Until end of rows?", key=f"until_end_{i}")
+                row_end = None if until_end else st.number_input(f"End row", value=37, min_value=1, step=1, key=f"row_end_{i}")
                 cell_ref = column_letter
 
             dtype = st.selectbox(f"Data type for {label}", ["number", "text", "date"], key=f"dtype_{i}")
-            user_fields.append((label, field_mode, cell_ref, dtype, row_start, row_end))
+            user_fields.append((label, field_mode, cell_ref, dtype, row_start, row_end, until_end))
 
     parsed_fields = []
-    for label, mode, ref, dtype, row_start, row_end in user_fields:
+    for label, mode, ref, dtype, row_start, row_end, until_end in user_fields:
         if mode == "Single Cell":
             row_idx, col_idx = cell_to_indices(ref)
             parsed_fields.append((label, mode, row_idx, col_idx, dtype, None, None))
         else:
             col_idx = cell_to_indices(ref + "1")[1] if ref else None
-            parsed_fields.append((label, mode, None, col_idx, dtype, row_start, row_end))
+            parsed_fields.append((label, mode, None, col_idx, dtype, row_start, row_end, until_end))
 
     month_mapping = {
         'Janvier': '01/01', 'Fevrier': '01/02', 'Mars': '01/03', 'Avril': '01/04',
@@ -115,7 +116,7 @@ if uploaded_files:
                             for row in range(date_row_start - 1, df.shape[0]):
                                 base_row_copy = base_row.copy()
                                 base_row_copy['date'] = str(df.iat[row, date_col])
-                                for label, mode, r_idx, c_idx, dtype, r_start, r_end in parsed_fields:
+                                for label, mode, r_idx, c_idx, dtype, r_start, r_end, until_end in parsed_fields:
                                     try:
                                         if mode == "Single Cell":
                                             base_row_copy[label] = df.iat[r_idx, c_idx]
@@ -126,11 +127,13 @@ if uploaded_files:
                                 compiled_data.append(base_row_copy)
                             continue
 
-                    max_start = max([pf[5] for pf in parsed_fields if pf[1] == "Column Range"] + [1])
-                    max_end = max([pf[6] for pf in parsed_fields if pf[1] == "Column Range"] + [2])
+                    max_start = max([pf[5] for pf in parsed_fields if pf[1] == "Column Range" and pf[5] is not None] + [1])
+                    max_end_candidates = [pf[6] for pf in parsed_fields if pf[1] == "Column Range" and pf[6] is not None]
+                    max_end = max(max_end_candidates) if max_end_candidates else df.shape[0]
+
                     for row in range(max_start - 1, max_end):
                         row_data = base_row.copy()
-                        for label, mode, r_idx, c_idx, dtype, r_start, r_end in parsed_fields:
+                        for label, mode, r_idx, c_idx, dtype, r_start, r_end, until_end in parsed_fields:
                             try:
                                 if mode == "Single Cell":
                                     row_data[label] = df.iat[r_idx, c_idx]
