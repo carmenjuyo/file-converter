@@ -25,10 +25,6 @@ def to_col_idx(value):
 rn_col_idx = to_col_idx(rn_col_input)
 rev_col_idx = to_col_idx(rev_col_input)
 
-if rn_col_idx is None or rev_col_idx is None:
-    st.warning("Please enter valid RN and REV column numbers to continue.")
-    st.stop()
-
 # Month mapping for sheet names to dates
 month_mapping = {
     'Janvier': '01/01', 'Fevrier': '01/02', 'Mars': '01/03', 'Avril': '01/04',
@@ -42,6 +38,9 @@ compiled_data = []
 segment_order = []
 
 if uploaded_files:
+    if rn_col_idx is None or rev_col_idx is None:
+        st.warning("Please enter valid RN and REV column numbers to continue.")
+        st.stop()
     for uploaded_file in uploaded_files:
         xls = pd.ExcelFile(uploaded_file)
         file_name = os.path.splitext(uploaded_file.name)[0]
