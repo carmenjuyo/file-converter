@@ -16,7 +16,7 @@ if uploaded_files:
         if spread_type == "Yearly (one sheet for full year)":
             date_col_letter = st.text_input("Enter the Excel column letter where the month dates are listed (e.g., A)", value="A")
             date_row_start = st.number_input("Start row for date column", value=26, min_value=1, step=1)
-        else:
+        elif spread_type == "Monthly (one sheet per month)":
             date_source = st.radio("How should we extract the date from monthly sheets?", ["From sheet name", "From a specific cell in each sheet"])
             if date_source == "From a specific cell in each sheet":
                 date_cell_input = st.text_input("Enter the Excel-style cell that contains the date (e.g., B2)", value="B2")
@@ -107,7 +107,7 @@ if uploaded_files:
                     extracted_date = df.iloc[date_row_start - 1:, date_col_idx].dropna().astype(str).tolist()
                     for idx, month_str in enumerate(extracted_date):
                         month_day = f"01/{month_str.zfill(2)}" if month_str.isdigit() else f"01/01"
-                        base_row = {'filename': file_name, 'date': f"{month_day}/{selected_year}"}
+                        base_row = {'filename': file_name, 'sheet': sheet_name, 'date': f"{month_day}/{selected_year}" if date_mode == "Yes – monthly/yearly" else ''}
                         segment_col = df.iloc[25:, 0].dropna()
                         new_segments = [
                             str(s).strip()
@@ -135,14 +135,9 @@ if uploaded_files:
                             except:
                                 continue
                 else:
-                    if date_source == "From sheet name":
-                        month_day = month_mapping.get(sheet_name, "01/01")
-                    else:
-                        date_row, date_col = cell_to_indices(date_cell_input)
-                        date_value = df.iloc[date_row, date_col]
-                        parsed = pd.to_datetime(date_value, errors='coerce')
-                        month_day = parsed.strftime("%d/%m") if not pd.isna(parsed) else "01/01"
-                    base_row = {'filename': file_name, 'date': f"{month_day}/{selected_year}"}
+                    if date_mode == "No – static data":
+                        month_day = ""
+                    elif date_source == "From sheet name":{'filename': file_name, 'date': f"{month_day}/{selected_year}"}
                     segment_col = df.iloc[25:, 0].dropna()
                     new_segments = [
                         str(s).strip()
@@ -175,7 +170,7 @@ if uploaded_files:
     if compiled_data:
         final_df = pd.DataFrame(compiled_data)
         if date_mode == "Yes – monthly/yearly" and 'date' in final_df.columns:
-            base_cols = ['filename', 'date']
+            base_cols = ['filename', 'sheet', 'date']
             data_cols = [col for col in final_df.columns if col not in base_cols]
             final_df = final_df[base_cols + data_cols]
 
@@ -184,7 +179,7 @@ if uploaded_files:
             final_df['date'] = final_df['date'].dt.strftime("%d/%m/%Y")
         else:
             final_df.drop(columns=['date'], errors='ignore', inplace=True)
-            base_cols = ['filename']
+            base_cols = ['filename', 'sheet']
             data_cols = [col for col in final_df.columns if col != 'filename']
             final_df = final_df[base_cols + data_cols]
         
