@@ -94,4 +94,22 @@ if uploaded_files:
         final_df = pd.DataFrame(compiled_data)
         base_cols = ['filename', 'date']
         segment_cols = [f"{seg}_{suffix}" for seg in segment_order for suffix in ('RN', 'REV') if f"{seg}_{suffix}" in final_df.columns]
-        extra_cols = [col for c
+        extra_cols = [col for col in final_df.columns if col not in base_cols + segment_cols]
+        final_df = final_df[base_cols + segment_cols + extra_cols]
+
+        final_df['date'] = pd.to_datetime(final_df['date'], format="%d/%m/%Y")
+        final_df = final_df.sort_values(by=['filename', 'date']).reset_index(drop=True)
+        final_df['date'] = final_df['date'].dt.strftime("%d/%m/%Y")
+
+        st.success("✅ Data extracted successfully!")
+        st.dataframe(final_df)
+
+        csv = final_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Download Combined CSV",
+            data=csv,
+            file_name="combined_rn_rev_data.csv",
+            mime="text/csv"
+        )
+else:
+    st.info("Step 1: Please upload one or more XLSX files to begin.")
