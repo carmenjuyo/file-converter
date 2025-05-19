@@ -99,48 +99,29 @@ if uploaded_files:
             for sheet_name in sheet_names:
                 try:
                     df = pd.read_excel(excel, sheet_name=sheet_name, header=None)
-                    base_row = {'filename': file_name, 'sheet': sheet_name}
-
-                    if date_mode == "Yes – monthly/yearly":
-                        if spread_type == "Monthly (one sheet per month)":
-                            if date_source == "From sheet name":
-                                for month_label, month_day in month_mapping.items():
-                                    if month_label.lower() in sheet_name.lower():
-                                        for selected_year in selected_years:
-                                            row_data = base_row.copy()
-                                            row_data['date'] = f"{month_day}/{selected_year}"
-                                            compiled_data.append(row_data)
-                                        break
-                            elif date_source == "From a specific cell in each sheet":
-                                row_idx, col_idx = cell_to_indices(date_cell_input)
-                                for selected_year in selected_years:
-                                    base_row['date'] = str(df.iat[row_idx, col_idx])
-
-                        elif spread_type == "Yearly (one sheet for full year)":
-                            date_col = cell_to_indices(date_col_letter + "1")[1]
-                            for row in range(date_row_start - 1, df.shape[0]):
-                                date_val = str(df.iat[row, date_col])
-                                if not any(str(yr) in date_val for yr in selected_years):
-                                    continue
-                                row_data = base_row.copy()
-                                row_data['date'] = date_val
-                                for label, mode, r_idx, c_idx, dtype, r_start, r_end, until_end in parsed_fields:
-                                    try:
-                                        if mode == "Single Cell":
-                                            row_data[label] = df.iat[r_idx, c_idx]
-                                        else:
-                                            row_data[label] = df.iat[row, c_idx]
-                                    except:
-                                        row_data[label] = None
-                                compiled_data.append(row_data)
-                            continue
 
                     max_start = max([pf[5] for pf in parsed_fields if pf[1] == "Column Range" and pf[5] is not None] + [1])
                     max_end_candidates = [pf[6] for pf in parsed_fields if pf[1] == "Column Range" and pf[6] is not None]
                     max_end = max(max_end_candidates) if max_end_candidates else df.shape[0]
 
                     for row in range(max_start - 1, max_end):
-                        row_data = base_row.copy()
+                        row_data = {'filename': file_name, 'sheet': sheet_name}
+
+                        if date_mode == "Yes – monthly/yearly":
+                            if spread_type == "Monthly (one sheet per month)":
+                                if date_source == "From sheet name":
+                                    for month_label, month_day in month_mapping.items():
+                                        if month_label.lower() in sheet_name.lower():
+                                            if selected_years:
+                                                row_data['date'] = f"{month_day}/{selected_years[0]}"
+                                            break
+                                elif date_source == "From a specific cell in each sheet":
+                                    row_idx, col_idx = cell_to_indices(date_cell_input)
+                                    row_data['date'] = str(df.iat[row_idx, col_idx])
+                            elif spread_type == "Yearly (one sheet for full year)":
+                                date_col = cell_to_indices(date_col_letter + "1")[1]
+                                row_data['date'] = str(df.iat[row, date_col])
+
                         for label, mode, r_idx, c_idx, dtype, r_start, r_end, until_end in parsed_fields:
                             try:
                                 if mode == "Single Cell":
@@ -149,6 +130,7 @@ if uploaded_files:
                                     row_data[label] = df.iat[row, c_idx]
                             except:
                                 row_data[label] = None
+
                         compiled_data.append(row_data)
 
                 except Exception as e:
