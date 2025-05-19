@@ -8,8 +8,23 @@ st.title("📊 Multi-File RN & REV Extractor")
 
 uploaded_files = st.file_uploader("Step 1: Upload one or more .xlsx files", type="xlsx", accept_multiple_files=True)
 
+def cell_to_indices(cell):
+    match = re.match(r"([A-Za-z]+)([0-9]+)", cell)
+    if not match:
+        return None, None
+    col_letters, row_number = match.groups()
+    col_idx = sum((ord(char.upper()) - ord('A') + 1) * (26 ** i) for i, char in enumerate(reversed(col_letters))) - 1
+    row_idx = int(row_number) - 1
+    return row_idx, col_idx
+
 if uploaded_files:
     date_mode = st.radio("Step 2: Is your data time-based?", ["Yes – monthly/yearly", "No – static data"])
+
+    spread_type = None
+    date_source = None
+    selected_year = None
+    date_cell_input = None
+
     if date_mode == "Yes – monthly/yearly":
         spread_type = st.radio("Step 2a: What kind of data spread is this?", ["Monthly (one sheet per month)", "Yearly (one sheet for full year)"])
 
@@ -21,19 +36,6 @@ if uploaded_files:
             if date_source == "From a specific cell in each sheet":
                 date_cell_input = st.text_input("Enter the Excel-style cell that contains the date (e.g., B2)", value="B2")
 
-        years = [str(y) for y in range(2023, 2031)]
-        selected_year = st.selectbox("Step 3: Select year to extract", options=years)
-    else:
-        spread_type = None
-        date_source = None
-        selected_year = None
-
-    if date_mode == "Yes – monthly/yearly" and spread_type == "Monthly (one sheet per month)":
-        date_source = st.radio("Step 2c: How should we extract the date from monthly sheets?", ["From sheet name", "From a specific cell in each sheet"], key="date_src")
-        if date_source == "From a specific cell in each sheet":
-            date_cell_input = st.text_input("Enter the Excel-style cell that contains the date (e.g., B2)", value="B2", key="date_cell")
-
-    if date_mode == "Yes – monthly/yearly":
         years = [str(y) for y in range(2023, 2031)]
         selected_year = st.selectbox("Step 3: Select year to extract", options=years)
 
@@ -58,15 +60,6 @@ if uploaded_files:
             dtype = st.selectbox(f"Data type for {label}", ["number", "text", "date"], key=f"dtype_{i}")
             user_fields.append((label, field_mode, cell_ref, dtype, row_start, row_end))
 
-    def cell_to_indices(cell):
-        match = re.match(r"([A-Za-z]+)([0-9]+)", cell)
-        if not match:
-            return None, None
-        col_letters, row_number = match.groups()
-        col_idx = sum((ord(char.upper()) - ord('A') + 1) * (26 ** i) for i, char in enumerate(reversed(col_letters))) - 1
-        row_idx = int(row_number) - 1
-        return row_idx, col_idx
-
     parsed_fields = []
     for label, mode, ref, dtype, row_start, row_end in user_fields:
         if mode == "Single Cell":
@@ -85,128 +78,69 @@ if uploaded_files:
         'September': '01/09', 'October': '01/10', 'November': '01/11', 'December': '01/12'
     }
 
-    compiled_data = []
-    segment_order = []
+    if st.button("🛠️ Start Extraction"):
+        compiled_data = []
 
-    for uploaded_file in uploaded_files:
-        xls = pd.ExcelFile(uploaded_file)
-        file_name = os.path.splitext(uploaded_file.name)[0]
+        for file in uploaded_files:
+            excel = pd.ExcelFile(file)
+            file_name = os.path.splitext(file.name)[0]
+            sheet_names = excel.sheet_names
 
-        st.markdown(f"### Sheets in {uploaded_file.name}")
-        selected_sheets = []
-        for sheet in xls.sheet_names:
-            if st.checkbox(f"{sheet} (from {uploaded_file.name})", value=True, key=f"{file_name}_{sheet}"):
-                selected_sheets.append(sheet)
+            for sheet_name in sheet_names:
+                try:
+                    df = pd.read_excel(excel, sheet_name=sheet_name, header=None)
+                    base_row = {'filename': file_name, 'sheet': sheet_name}
 
-        for sheet_name in selected_sheets:
-            try:
-                df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
-
-                if spread_type == "Yearly (one sheet for full year)":
-                    date_col_idx = sum((ord(char.upper()) - ord('A') + 1) * (26 ** i) for i, char in enumerate(reversed(date_col_letter))) - 1
-                    extracted_date = df.iloc[date_row_start - 1:, date_col_idx].dropna().astype(str).tolist()
-                    for idx, month_str in enumerate(extracted_date):
-                        month_day = f"01/{month_str.zfill(2)}" if month_str.isdigit() else f"01/01"
-                        base_row = {'filename': file_name, 'sheet': sheet_name, 'date': f"{month_day}/{selected_year}" if date_mode == "Yes – monthly/yearly" else ''}
-                        segment_col = df.iloc[25:, 0].dropna()
-                        new_segments = [
-                            str(s).strip()
-                            for s in segment_col
-                            if isinstance(s, str) and s.strip().upper() not in ['TOTAL', 'VS BUD 25']
-                        ]
-                        for segment in new_segments:
-                            if segment not in segment_order:
-                                segment_order.append(segment)
-                            row = base_row.copy()
-                            try:
-                                seg_row_idx = df[df.iloc[:, 0].astype(str).str.strip() == segment].index[0]
-                                for label, mode, row_idx, col_idx, dtype, r_start, r_end in parsed_fields:
+                    if date_mode == "Yes – monthly/yearly":
+                        if spread_type == "Monthly (one sheet per month)":
+                            if date_source == "From sheet name":
+                                for month_label, month_day in month_mapping.items():
+                                    if month_label.lower() in sheet_name.lower():
+                                        base_row['date'] = f"{month_day}/{selected_year}"
+                                        break
+                            elif date_source == "From a specific cell in each sheet":
+                                row_idx, col_idx = cell_to_indices(date_cell_input)
+                                base_row['date'] = str(df.iat[row_idx, col_idx])
+                        elif spread_type == "Yearly (one sheet for full year)":
+                            date_col = cell_to_indices(date_col_letter + "1")[1]
+                            for row in range(date_row_start - 1, df.shape[0]):
+                                base_row_copy = base_row.copy()
+                                base_row_copy['date'] = str(df.iat[row, date_col])
+                                for label, mode, r_idx, c_idx, dtype, r_start, r_end in parsed_fields:
                                     try:
-                                        val = df.iloc[seg_row_idx, col_idx] if mode == "Single Cell" else df.iloc[r_start - 1 + idx, col_idx]
-                                        if dtype == "number":
-                                            row[f'{segment}_{label}'] = float(val)
-                                        elif dtype == "text":
-                                            row[f'{segment}_{label}'] = str(val)
-                                        elif dtype == "date":
-                                            row[f'{segment}_{label}'] = pd.to_datetime(val).strftime("%d/%m/%Y")
+                                        if mode == "Single Cell":
+                                            base_row_copy[label] = df.iat[r_idx, c_idx]
+                                        else:
+                                            base_row_copy[label] = df.iat[row, c_idx]
                                     except:
-                                        row[f'{segment}_{label}'] = 0.0 if dtype == "number" else ""
-                                compiled_data.append(row)
-                            except:
-                                continue
-                else:
-                    if date_mode == "No – static data":
-                        month_day = ""
-                    elif date_source == "From sheet name" and date_mode == "Yes – monthly/yearly":
-                    month_day = month_mapping.get(sheet_name.strip(), '01/01')
-                    base_row = {'filename': file_name, 'sheet': sheet_name, 'date': f"{month_day}/{selected_year}"}/{selected_year}"}
-                    segment_col = df.iloc[25:, 0].dropna()
-                    new_segments = [
-                        str(s).strip()
-                        for s in segment_col
-                        if isinstance(s, str) and s.strip().upper() not in ['TOTAL', 'VS BUD 25']
-                    ]
-                    for segment in new_segments:
-                        if segment not in segment_order:
-                            segment_order.append(segment)
-                        row = base_row.copy()
-                        try:
-                            seg_row_idx = df[df.iloc[:, 0].astype(str).str.strip() == segment].index[0]
-                            for label, mode, row_idx, col_idx, dtype, r_start, r_end in parsed_fields:
-                                try:
-                                    val = df.iloc[seg_row_idx, col_idx] if mode == "Single Cell" else df.iloc[r_start - 1, col_idx]
-                                    if dtype == "number":
-                                        row[f'{segment}_{label}'] = float(val)
-                                    elif dtype == "text":
-                                        row[f'{segment}_{label}'] = str(val)
-                                    elif dtype == "date":
-                                        row[f'{segment}_{label}'] = pd.to_datetime(val).strftime("%d/%m/%Y")
-                                except:
-                                    row[f'{segment}_{label}'] = 0.0 if dtype == "number" else ""
-                            compiled_data.append(row)
-                        except:
+                                        base_row_copy[label] = None
+                                compiled_data.append(base_row_copy)
                             continue
-            except Exception as e:
-                st.warning(f"Could not process sheet {sheet_name} in {file_name}: {e}")
 
-    if compiled_data:
-        final_df = pd.DataFrame(compiled_data)
-        if date_mode == "Yes – monthly/yearly" and 'date' in final_df.columns:
-            base_cols = ['filename', 'sheet', 'date']
-            data_cols = [col for col in final_df.columns if col not in base_cols]
-            final_df = final_df[base_cols + data_cols]
+                    # Static or monthly, no per-row date mapping
+                    for label, mode, r_idx, c_idx, dtype, r_start, r_end in parsed_fields:
+                        if mode == "Single Cell":
+                            try:
+                                base_row[label] = df.iat[r_idx, c_idx]
+                            except:
+                                base_row[label] = None
+                        else:
+                            for row in range(r_start - 1, r_end):
+                                row_data = base_row.copy()
+                                try:
+                                    row_data[label] = df.iat[row, c_idx]
+                                except:
+                                    row_data[label] = None
+                                compiled_data.append(row_data)
+                    if not any(f[1] == "Column Range" for f in parsed_fields):
+                        compiled_data.append(base_row)
 
-            final_df['date'] = pd.to_datetime(final_df['date'], format="%d/%m/%Y")
-            final_df = final_df.sort_values(by=['filename', 'date']).reset_index(drop=True)
-            final_df['date'] = final_df['date'].dt.strftime("%d/%m/%Y")
+                except Exception as e:
+                    st.warning(f"Could not process sheet {sheet_name} in {file_name}: {e}")
+
+        if compiled_data:
+            df_out = pd.DataFrame(compiled_data)
+            st.dataframe(df_out.head(100))
+            st.download_button("⬇️ Download Combined CSV", df_out.to_csv(index=False).encode("utf-8"), file_name="compiled_output.csv", mime="text/csv")
         else:
-            final_df.drop(columns=['date'], errors='ignore', inplace=True)
-            base_cols = ['filename', 'sheet']
-            data_cols = [col for col in final_df.columns if col != 'filename']
-            final_df = final_df[base_cols + data_cols]
-        
-
-        st.success("✅ Data extracted successfully!")
-        st.dataframe(final_df)
-
-        st.markdown("### 📋 Preview: Grouped Field Summary")
-        with st.expander("See summary of all extracted fields"):
-            for parsed in parsed_fields:
-                label = parsed[0]
-                preview_cols = [col for col in final_df.columns if col.endswith(f"_{label}")]
-                if preview_cols:
-                    st.markdown(f"**{label} fields**")
-                    if 'date' in final_df.columns:
-                        st.dataframe(final_df[preview_cols + ['date']].groupby('date').sum().reset_index())
-                    else:
-                        st.dataframe(final_df[preview_cols].sum().to_frame(name='Total'))
-
-        csv = final_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download Combined CSV",
-            data=csv,
-            file_name="combined_rn_rev_data.csv",
-            mime="text/csv"
-        )
-else:
-    st.info("Step 1: Please upload one or more XLSX files to begin.")
+            st.error("No data was extracted. Please review your settings and files.")
