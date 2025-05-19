@@ -25,6 +25,15 @@ if uploaded_files:
     selected_year = None
     date_cell_input = None
 
+    all_sheet_options = {}
+    for file in uploaded_files:
+        excel = pd.ExcelFile(file)
+        all_sheet_options[file.name] = excel.sheet_names
+
+    sheet_selection = {}
+    for file in uploaded_files:
+        sheet_selection[file.name] = st.multiselect(f"Select sheets to process from {file.name}", options=all_sheet_options[file.name])
+
     if date_mode == "Yes – monthly/yearly":
         spread_type = st.radio("Step 2a: What kind of data spread is this?", ["Monthly (one sheet per month)", "Yearly (one sheet for full year)"])
 
@@ -84,7 +93,7 @@ if uploaded_files:
         for file in uploaded_files:
             excel = pd.ExcelFile(file)
             file_name = os.path.splitext(file.name)[0]
-            sheet_names = excel.sheet_names
+            sheet_names = sheet_selection[file.name]
 
             for sheet_name in sheet_names:
                 try:
@@ -117,7 +126,6 @@ if uploaded_files:
                                 compiled_data.append(base_row_copy)
                             continue
 
-                    # Static or monthly, no per-row date mapping
                     for label, mode, r_idx, c_idx, dtype, r_start, r_end in parsed_fields:
                         if mode == "Single Cell":
                             try:
