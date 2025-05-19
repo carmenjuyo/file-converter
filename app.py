@@ -5,11 +5,18 @@ import os
 st.set_page_config(page_title="Multi-File RN & REV Extractor", layout="wide")
 st.title("📊 Multi-File RN & REV Extractor")
 
-# Step 1: Select year
-years = [str(y) for y in range(2023, 2031)]
-selected_year = st.selectbox("Step 1: Select year to extract", options=years)
+# Upload first
+uploaded_files = st.file_uploader("Step 1: Upload one or more .xlsx files", type="xlsx", accept_multiple_files=True)
 
-# Step 2: Input RN and REV columns for selected year
+# Only show year and column selection after upload
+if uploaded_files:
+    # Step 2: Select year
+    years = [str(y) for y in range(2023, 2031)]
+    selected_year = st.selectbox("Step 2: Select year to extract", options=years)
+
+    # Step 3: Input RN and REV columns for selected year
+    rn_col_input = st.text_input(f"Step 3: Enter RN column number for {selected_year} (1-based)", value="")
+    rev_col_input = st.text_input(f"Step 3: Enter REV column number for {selected_year} (1-based)", value="")
 rn_col_input = st.text_input(f"Step 2: Enter RN column number for {selected_year} (1-based)", value="")
 rev_col_input = st.text_input(f"Step 2: Enter REV column number for {selected_year} (1-based)", value="")
 
@@ -25,7 +32,14 @@ def to_col_idx(value):
 rn_col_idx = to_col_idx(rn_col_input)
 rev_col_idx = to_col_idx(rev_col_input)
 
-# Month mapping for sheet names to dates
+    rn_col_idx = to_col_idx(rn_col_input)
+    rev_col_idx = to_col_idx(rev_col_input)
+
+    if rn_col_idx is None or rev_col_idx is None:
+        st.warning("Please enter valid RN and REV column numbers to continue.")
+        st.stop()
+
+    # Month mapping for sheet names to dates
 month_mapping = {
     'Janvier': '01/01', 'Fevrier': '01/02', 'Mars': '01/03', 'Avril': '01/04',
     'Mai': '01/05', 'Juin': '01/06', 'Juillet': '01/07', 'Aout': '01/08',
