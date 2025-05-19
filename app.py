@@ -63,8 +63,6 @@ if uploaded_files:
             else:
                 field_files = [f.name for f in uploaded_files]
 
-            aggregation_key = st.text_input(f"If you want to aggregate {label}, enter the common field to group by (optional)", key=f"aggby_{i}")
-
             if field_mode == "Single Cell":
                 cell_ref = st.text_input(f"Excel-style cell (e.g., E25) for {label}", key=f"cell_{i}")
                 row_start, row_end, until_end = None, None, False
@@ -76,16 +74,21 @@ if uploaded_files:
                 cell_ref = column_letter
 
             dtype = st.selectbox(f"Data type for {label}", ["number", "text", "date"], key=f"dtype_{i}")
-            user_fields.append((label, field_mode, cell_ref, dtype, row_start, row_end, until_end, field_scope, field_files, aggregation_key))
+            user_fields.append((label, field_mode, cell_ref, dtype, row_start, row_end, until_end, field_scope, field_files))
+
+    aggregation_enabled = st.checkbox("Step 5: Do you want to aggregate the extracted data?")
+    if aggregation_enabled:
+        group_field = st.selectbox("Select a field to group by", [f[0] for f in user_fields], key="agg_field")
+        agg_func = st.selectbox("Aggregation function for numeric fields", ["sum", "mean", "first", "last"], key="agg_func")
 
     parsed_fields = []
-    for label, mode, ref, dtype, row_start, row_end, until_end, scope, field_files, aggby in user_fields:
+    for label, mode, ref, dtype, row_start, row_end, until_end, scope, field_files in user_fields:
         if mode == "Single Cell":
             row_idx, col_idx = cell_to_indices(ref)
-            parsed_fields.append((label, mode, row_idx, col_idx, dtype, None, None, until_end, scope, field_files, aggby))
+            parsed_fields.append((label, mode, row_idx, col_idx, dtype, None, None, until_end, scope, field_files))
         else:
             col_idx = cell_to_indices(ref + "1")[1] if ref else None
-            parsed_fields.append((label, mode, None, col_idx, dtype, row_start, row_end, until_end, scope, field_files, aggby))
+            parsed_fields.append((label, mode, None, col_idx, dtype, row_start, row_end, until_end, scope, field_files))
 
     month_mapping = {
         'Janvier': '01/01', 'Fevrier': '01/02', 'Mars': '01/03', 'Avril': '01/04',
@@ -130,7 +133,7 @@ if uploaded_files:
                                 date_col = cell_to_indices(date_col_letter + "1")[1]
                                 row_data['date'] = str(df.iat[row, date_col])
 
-                        for label, mode, r_idx, c_idx, dtype, r_start, r_end, until_end, scope, files_applied, aggby in parsed_fields:
+                        for label, mode, r_idx, c_idx, dtype, r_start, r_end, until_end, scope, files_applied in parsed_fields:
                             try:
                                 if file.name not in files_applied:
                                     row_data[label] = None
@@ -150,10 +153,13 @@ if uploaded_files:
         if compiled_data:
             df_out = pd.DataFrame(compiled_data)
 
-            for label, *_ , aggby in parsed_fields:
-                if aggby:
-                    if aggby in df_out.columns:
-                        df_out = df_out.groupby([aggby, 'filename', 'sheet', 'date'], as_index=False).first()
+            if aggregation_enabled and group_field in df_out.columns:
+                numeric_cols = df_out.select_dtypes(include='number').columns.tolist()
+                group_fields = ['filename', 'sheet']
+                if 'date' in df_out.columns:
+                    group_fields.append('date')
+                group_fields.append(group_field)
+                df_out = df_out.groupby(group_fields, as_index=False).agg({col: agg_func for col in numeric_cols if col not in group_fields})
 
             st.dataframe(df_out.head(100))
             st.download_button("⬇️ Download Combined CSV", df_out.to_csv(index=False).encode("utf-8"), file_name="compiled_output.csv", mime="text/csv")
