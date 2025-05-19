@@ -21,9 +21,48 @@ if uploaded_files:
     years = [str(y) for y in range(2023, 2031)]
     selected_year = st.selectbox("Step 2: Select year to extract", options=years)
 
-    # Step 3: Input RN and REV Excel-style cell references
-    rn_cell = st.text_input(f"Step 3: Enter RN cell (e.g., E25) for {selected_year}", value="")
-    rev_cell = st.text_input(f"Step 3: Enter REV cell (e.g., M25) for {selected_year}", value="")
+    # Step 3: Dynamically define data fields with type or range
+    st.markdown("#### Step 3: Define the data fields you want to extract")
+    num_fields = st.number_input("How many fields do you want to extract?", min_value=1, max_value=10, value=2, step=1)
+
+    user_fields = []
+    for i in range(num_fields):
+        with st.expander(f"Field {i+1}"):
+            label = st.text_input(f"Field name {i+1}", key=f"label_{i}")
+            field_mode = st.selectbox(f"Mode for {label}", ["Single Cell", "Column Range"], key=f"mode_{i}")
+
+            if field_mode == "Single Cell":
+                cell_ref = st.text_input(f"Excel-style cell (e.g., E25) for {label}", key=f"cell_{i}")
+                row_start, row_end = None, None
+            else:
+                column_letter = st.text_input(f"Column letter for range (e.g., E) for {label}", key=f"col_{i}")
+                row_start = st.number_input(f"Start row", value=26, min_value=1, step=1, key=f"row_start_{i}")
+                row_end = st.number_input(f"End row", value=37, min_value=1, step=1, key=f"row_end_{i}")
+                cell_ref = column_letter  # used for consistency
+
+            dtype = st.selectbox(f"Data type for {label}", ["number", "text", "date"], key=f"dtype_{i}")
+            user_fields.append((label, field_mode, cell_ref, dtype, row_start, row_end))
+
+    def cell_to_indices(cell):
+        match = re.match(r"([A-Za-z]+)([0-9]+)", cell)
+        if not match:
+            return None, None
+        col_letters, row_number = match.groups()
+        col_idx = sum((ord(char.upper()) - ord('A') + 1) * (26 ** i) for i, char in enumerate(reversed(col_letters))) - 1
+        row_idx = int(row_number) - 1
+        return row_idx, col_idx
+
+    parsed_fields = []
+    for label, mode, ref, dtype, row_start, row_end in user_fields:
+        if mode == "Single Cell":
+            row_idx, col_idx = cell_to_indices(ref)
+            parsed_fields.append((label, mode, row_idx, col_idx, dtype, None, None))
+        else:
+            col_idx = cell_to_indices(ref + "1")[1] if ref else None
+            parsed_fields.append((label, mode, None, col_idx, dtype, row_start, row_end))
+    if any(x[1] is None or x[2] is None for x in parsed_fields):
+        st.warning("Please ensure all field cells are valid Excel-style references like E25.")
+        st.stop()st.text_input(f"Step 3: Enter REV cell (e.g., M25) for {selected_year}", value="")
 
     def cell_to_indices(cell):
         match = re.match(r"([A-Za-z]+)([0-9]+)", cell)
@@ -86,7 +125,8 @@ if uploaded_files:
 
                     existing_keys = set().union(*[row.keys() for row in compiled_data]) if compiled_data else set()
                     for seg in new_segments:
-                        if f"{seg}_RN" not in existing_keys or f"{seg}_REV" not in existing_keys:
+                        for label, _, _ in parsed_fields:
+                            if f"{seg}_{label}" not in existing_keys:
                             for row in compiled_data:
                                 row.setdefault(f"{seg}_RN", 0.0)
                                 row.setdefault(f"{seg}_REV", 0.0)
@@ -102,8 +142,20 @@ if uploaded_files:
                                 for segment in segments:
                                     try:
                                         seg_row_idx = df[df.iloc[:, 0].astype(str).str.strip() == segment].index[0]
-                                        row[f'{segment}_RN'] = float(df.iloc[seg_row_idx, rn_col_idx])
-                                        row[f'{segment}_REV'] = float(df.iloc[seg_row_idx, rev_col_idx])
+                                        for label, mode, row_idx, col_idx, dtype, r_start, r_end in parsed_fields:
+                                            try:
+                                                if mode == "Single Cell":
+                                                    val = df.iloc[seg_row_idx, col_idx]
+                                                elif mode == "Column Range":
+                                                    val = df.iloc[r_start - 1 + idx, col_idx]
+                                                if dtype == "number":
+                                                    row[f'{segment}_{label}'] = float(val)
+                                                elif dtype == "text":
+                                                    row[f'{segment}_{label}'] = str(val)
+                                                elif dtype == "date":
+                                                    row[f'{segment}_{label}'] = pd.to_datetime(val).strftime("%d/%m/%Y")
+                                            except:
+                                                row[f'{segment}_{label}'] = 0.0 if dtype == "number" else ""float(df.iloc[seg_row_idx, rev_col_idx])
                                     except:
                                         row[f'{segment}_RN'] = 0.0
                                         row[f'{segment}_REV'] = 0.0
@@ -128,7 +180,7 @@ if uploaded_files:
     if compiled_data:
         final_df = pd.DataFrame(compiled_data)
         base_cols = ['filename', 'date']
-        segment_cols = [f"{seg}_{suffix}" for seg in segment_order for suffix in ('RN', 'REV') if f"{seg}_{suffix}" in final_df.columns]
+        segment_cols = [col for col in final_df.columns if col not in base_cols and col not in extra_cols]
         extra_cols = [col for col in final_df.columns if col not in base_cols + segment_cols]
         final_df = final_df[base_cols + segment_cols + extra_cols]
 
@@ -138,6 +190,14 @@ if uploaded_files:
 
         st.success("✅ Data extracted successfully!")
         st.dataframe(final_df)
+
+        st.markdown("### 📋 Preview: Grouped Field Summary")
+        with st.expander("See summary of all extracted fields"):
+            for label, _, _, _, _, _ in parsed_fields:
+                preview_cols = [col for col in final_df.columns if col.endswith(f"_{label}")]
+                if preview_cols:
+                    st.markdown(f"**{label} fields**")
+                    st.dataframe(final_df[preview_cols + ['date']].groupby('date').sum().reset_index())
 
         csv = final_df.to_csv(index=False).encode('utf-8')
         st.download_button(
