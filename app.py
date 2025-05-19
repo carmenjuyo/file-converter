@@ -33,8 +33,9 @@ if uploaded_files:
         if date_source == "From a specific cell in each sheet":
             date_cell_input = st.text_input("Enter the Excel-style cell that contains the date (e.g., B2)", value="B2", key="date_cell")
 
-    years = [str(y) for y in range(2023, 2031)]
-    selected_year = st.selectbox("Step 3: Select year to extract", options=years)
+    if date_mode == "Yes – monthly/yearly":
+        years = [str(y) for y in range(2023, 2031)]
+        selected_year = st.selectbox("Step 3: Select year to extract", options=years)
 
     st.markdown("#### Step 4: Define the data fields you want to extract")
     num_fields = st.number_input("How many fields do you want to extract?", min_value=1, max_value=10, value=2, step=1)
