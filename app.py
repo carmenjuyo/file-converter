@@ -137,7 +137,9 @@ if uploaded_files:
                 else:
                     if date_mode == "No – static data":
                         month_day = ""
-                    elif date_source == "From sheet name":{'filename': file_name, 'date': f"{month_day}/{selected_year}"}
+                    elif date_source == "From sheet name" and date_mode == "Yes – monthly/yearly":
+                    month_day = month_mapping.get(sheet_name.strip(), '01/01')
+                    base_row = {'filename': file_name, 'sheet': sheet_name, 'date': f"{month_day}/{selected_year}"}/{selected_year}"}
                     segment_col = df.iloc[25:, 0].dropna()
                     new_segments = [
                         str(s).strip()
