@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import re
 
 st.set_page_config(page_title="Multi-File RN & REV Extractor", layout="wide")
 st.title("📊 Multi-File RN & REV Extractor")
@@ -14,24 +15,24 @@ if uploaded_files:
     years = [str(y) for y in range(2023, 2031)]
     selected_year = st.selectbox("Step 2: Select year to extract", options=years)
 
-    # Step 3: Input RN and REV columns for selected year
-    rn_col_input = st.text_input(f"Step 3: Enter RN column number for {selected_year} (1-based)", value="")
-    rev_col_input = st.text_input(f"Step 3: Enter REV column number for {selected_year} (1-based)", value="")
+    # Step 3: Input RN and REV Excel-style cell references
+    rn_cell = st.text_input(f"Step 3: Enter RN cell (e.g., E25) for {selected_year}", value="")
+    rev_cell = st.text_input(f"Step 3: Enter REV cell (e.g., M25) for {selected_year}", value="")
 
-    def to_col_idx(value):
-        try:
-            idx = int(value) - 1
-            if idx < 0:
-                raise ValueError
-            return idx
-        except:
-            return None
+    def cell_to_indices(cell):
+        match = re.match(r"([A-Za-z]+)([0-9]+)", cell)
+        if not match:
+            return None, None
+        col_letters, row_number = match.groups()
+        col_idx = sum((ord(char.upper()) - ord('A') + 1) * (26 ** i) for i, char in enumerate(reversed(col_letters))) - 1
+        row_idx = int(row_number) - 1
+        return row_idx, col_idx
 
-    rn_col_idx = to_col_idx(rn_col_input)
-    rev_col_idx = to_col_idx(rev_col_input)
+    rn_row_idx, rn_col_idx = cell_to_indices(rn_cell)
+    rev_row_idx, rev_col_idx = cell_to_indices(rev_cell)
 
-    if rn_col_idx is None or rev_col_idx is None:
-        st.warning("Please enter valid RN and REV column numbers to continue.")
+    if None in (rn_row_idx, rn_col_idx, rev_row_idx, rev_col_idx):
+        st.warning("Please enter valid Excel-style cell references like E25 and M25.")
         st.stop()
 
     # Month mapping for sheet names to dates
@@ -58,8 +59,9 @@ if uploaded_files:
             if sheet_name in month_mapping:
                 month_day = month_mapping[sheet_name]
                 try:
-                    df = pd.read_excel(xls, sheet_name=sheet_name, header=24)
-                    segment_col = df.iloc[:, 0].dropna()
+                    df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+
+                    segment_col = df.iloc[25:, 0].dropna()
                     new_segments = [
                         str(s).strip()
                         for s in segment_col
@@ -80,9 +82,9 @@ if uploaded_files:
                     row = {'filename': file_name, 'date': f"{month_day}/{selected_year}"}
                     for segment in segments:
                         try:
-                            seg_row = df[df.iloc[:, 0].astype(str).str.strip() == segment]
-                            row[f'{segment}_RN'] = float(seg_row.iloc[0, rn_col_idx])
-                            row[f'{segment}_REV'] = float(seg_row.iloc[0, rev_col_idx])
+                            seg_row_idx = df[df.iloc[:, 0].astype(str).str.strip() == segment].index[0]
+                            row[f'{segment}_RN'] = float(df.iloc[seg_row_idx, rn_col_idx])
+                            row[f'{segment}_REV'] = float(df.iloc[seg_row_idx, rev_col_idx])
                         except:
                             row[f'{segment}_RN'] = 0.0
                             row[f'{segment}_REV'] = 0.0
