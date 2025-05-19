@@ -186,14 +186,7 @@ if uploaded_files:
             base_cols = ['filename']
             data_cols = [col for col in final_df.columns if col != 'filename']
             final_df = final_df[base_cols + data_cols]
-
-            final_df['date'] = pd.to_datetime(final_df['date'], format="%d/%m/%Y")
-            final_df = final_df.sort_values(by=['filename', 'date']).reset_index(drop=True)
-            final_df['date'] = final_df['date'].dt.strftime("%d/%m/%Y")
-        else:
-            base_cols = ['filename']
-            data_cols = [col for col in final_df.columns if col != 'filename']
-            final_df = final_df[base_cols + data_cols]
+        
 
         st.success("✅ Data extracted successfully!")
         st.dataframe(final_df)
