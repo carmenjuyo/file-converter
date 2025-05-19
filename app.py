@@ -92,6 +92,26 @@ if uploaded_files:
                                 row.setdefault(f"{seg}_REV", 0.0)
                     segments = list(new_segments)
 
+                    if spread_type == "Yearly (one sheet for full year)":
+                        try:
+                            date_col_idx = sum((ord(char.upper()) - ord('A') + 1) * (26 ** i) for i, char in enumerate(reversed(date_col_letter))) - 1
+                            extracted_date = df.iloc[date_row_start - 1: , date_col_idx].dropna().astype(str).tolist()
+                            for idx, month_str in enumerate(extracted_date):
+                                month_day = f"01/{month_str.zfill(2)}" if month_str.isdigit() else f"01/01"
+                                row = {'filename': file_name, 'date': f"{month_day}/{selected_year}"}
+                                for segment in segments:
+                                    try:
+                                        seg_row_idx = df[df.iloc[:, 0].astype(str).str.strip() == segment].index[0]
+                                        row[f'{segment}_RN'] = float(df.iloc[seg_row_idx, rn_col_idx])
+                                        row[f'{segment}_REV'] = float(df.iloc[seg_row_idx, rev_col_idx])
+                                    except:
+                                        row[f'{segment}_RN'] = 0.0
+                                        row[f'{segment}_REV'] = 0.0
+                                compiled_data.append(row)
+                            continue  # skip monthly-style row append
+                        except:
+                            st.warning("⚠️ Could not extract dates for yearly sheet. Check your column letter and starting row.")
+
                     row = {'filename': file_name, 'date': f"{month_day}/{selected_year}"}
                     for segment in segments:
                         try:
