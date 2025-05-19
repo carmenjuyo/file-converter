@@ -28,13 +28,10 @@ if uploaded_files:
         date_source = None
         selected_year = None
 
-    if spread_type == "Yearly (one sheet for full year)":
-        date_col_letter = st.text_input("Enter the Excel column letter where the month dates are listed (e.g., A)", value="A")
-        date_row_start = st.number_input("Start row for date column", value=26, min_value=1, step=1)
-    else:
-        date_source = st.radio("How should we extract the date from monthly sheets?", ["From sheet name", "From a specific cell in each sheet"])
+    if date_mode == "Yes – monthly/yearly" and spread_type == "Monthly (one sheet per month)":
+        date_source = st.radio("Step 2c: How should we extract the date from monthly sheets?", ["From sheet name", "From a specific cell in each sheet"], key="date_src")
         if date_source == "From a specific cell in each sheet":
-            date_cell_input = st.text_input("Enter the Excel-style cell that contains the date (e.g., B2)", value="B2")
+            date_cell_input = st.text_input("Enter the Excel-style cell that contains the date (e.g., B2)", value="B2", key="date_cell")
 
     years = [str(y) for y in range(2023, 2031)]
     selected_year = st.selectbox("Step 3: Select year to extract", options=years)
@@ -176,9 +173,18 @@ if uploaded_files:
 
     if compiled_data:
         final_df = pd.DataFrame(compiled_data)
-        if 'date' in final_df.columns:
+        if date_mode == "Yes – monthly/yearly" and 'date' in final_df.columns:
             base_cols = ['filename', 'date']
             data_cols = [col for col in final_df.columns if col not in base_cols]
+            final_df = final_df[base_cols + data_cols]
+
+            final_df['date'] = pd.to_datetime(final_df['date'], format="%d/%m/%Y")
+            final_df = final_df.sort_values(by=['filename', 'date']).reset_index(drop=True)
+            final_df['date'] = final_df['date'].dt.strftime("%d/%m/%Y")
+        else:
+            final_df.drop(columns=['date'], errors='ignore', inplace=True)
+            base_cols = ['filename']
+            data_cols = [col for col in final_df.columns if col != 'filename']
             final_df = final_df[base_cols + data_cols]
 
             final_df['date'] = pd.to_datetime(final_df['date'], format="%d/%m/%Y")
@@ -194,7 +200,8 @@ if uploaded_files:
 
         st.markdown("### 📋 Preview: Grouped Field Summary")
         with st.expander("See summary of all extracted fields"):
-            for label, _, _, _, _, _ in parsed_fields:
+            for parsed in parsed_fields:
+                label = parsed[0]
                 preview_cols = [col for col in final_df.columns if col.endswith(f"_{label}")]
                 if preview_cols:
                     st.markdown(f"**{label} fields**")
