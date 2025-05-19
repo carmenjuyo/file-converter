@@ -11,7 +11,13 @@ uploaded_files = st.file_uploader("Step 1: Upload one or more .xlsx files", type
 
 # Only show year and column selection after upload
 if uploaded_files:
-    # Step 2: Select year
+    spread_type = st.radio("Step 2: What kind of data spread is this?", ["Monthly (one sheet per month)", "Yearly (one sheet for full year)"])
+
+    if spread_type == "Yearly (one sheet for full year)":
+        date_col_letter = st.text_input("Enter the Excel column letter where the month dates are listed (e.g., A)", value="A")
+        date_row_start = st.number_input("Start row for date column", value=26, min_value=1, step=1)
+
+    # Step 3: Select year
     years = [str(y) for y in range(2023, 2031)]
     selected_year = st.selectbox("Step 2: Select year to extract", options=years)
 
@@ -39,7 +45,10 @@ if uploaded_files:
     month_mapping = {
         'Janvier': '01/01', 'Fevrier': '01/02', 'Mars': '01/03', 'Avril': '01/04',
         'Mai': '01/05', 'Juin': '01/06', 'Juillet': '01/07', 'Aout': '01/08',
-        'Septembre': '01/09', 'Octobre': '01/10', 'Novembre': '01/11', 'Decembre': '01/12'
+        'Septembre': '01/09', 'Octobre': '01/10', 'Novembre': '01/11', 'Decembre': '01/12',
+        'January': '01/01', 'February': '01/02', 'March': '01/03', 'April': '01/04',
+        'May': '01/05', 'June': '01/06', 'July': '01/07', 'August': '01/08',
+        'September': '01/09', 'October': '01/10', 'November': '01/11', 'December': '01/12'
     }
 
     compiled_data = []
@@ -57,6 +66,10 @@ if uploaded_files:
 
         for sheet_name in selected_sheets:
             if sheet_name in month_mapping:
+                month_day = month_mapping[sheet_name]
+            else:
+                # Use first day of year if no month keyword found
+                month_day = f"01/01"
                 month_day = month_mapping[sheet_name]
                 try:
                     df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
