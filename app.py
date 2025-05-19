@@ -17,20 +17,15 @@ if uploaded_files:
     # Step 3: Input RN and REV columns for selected year
     rn_col_input = st.text_input(f"Step 3: Enter RN column number for {selected_year} (1-based)", value="")
     rev_col_input = st.text_input(f"Step 3: Enter REV column number for {selected_year} (1-based)", value="")
-rn_col_input = st.text_input(f"Step 2: Enter RN column number for {selected_year} (1-based)", value="")
-rev_col_input = st.text_input(f"Step 2: Enter REV column number for {selected_year} (1-based)", value="")
 
-def to_col_idx(value):
-    try:
-        idx = int(value) - 1
-        if idx < 0:
-            raise ValueError
-        return idx
-    except:
-        return None
-
-rn_col_idx = to_col_idx(rn_col_input)
-rev_col_idx = to_col_idx(rev_col_input)
+    def to_col_idx(value):
+        try:
+            idx = int(value) - 1
+            if idx < 0:
+                raise ValueError
+            return idx
+        except:
+            return None
 
     rn_col_idx = to_col_idx(rn_col_input)
     rev_col_idx = to_col_idx(rev_col_input)
@@ -40,21 +35,15 @@ rev_col_idx = to_col_idx(rev_col_input)
         st.stop()
 
     # Month mapping for sheet names to dates
-month_mapping = {
-    'Janvier': '01/01', 'Fevrier': '01/02', 'Mars': '01/03', 'Avril': '01/04',
-    'Mai': '01/05', 'Juin': '01/06', 'Juillet': '01/07', 'Aout': '01/08',
-    'Septembre': '01/09', 'Octobre': '01/10', 'Novembre': '01/11', 'Decembre': '01/12'
-}
+    month_mapping = {
+        'Janvier': '01/01', 'Fevrier': '01/02', 'Mars': '01/03', 'Avril': '01/04',
+        'Mai': '01/05', 'Juin': '01/06', 'Juillet': '01/07', 'Aout': '01/08',
+        'Septembre': '01/09', 'Octobre': '01/10', 'Novembre': '01/11', 'Decembre': '01/12'
+    }
 
-uploaded_files = st.file_uploader("Step 3: Upload one or more .xlsx files", type="xlsx", accept_multiple_files=True)
+    compiled_data = []
+    segment_order = []
 
-compiled_data = []
-segment_order = []
-
-if uploaded_files:
-    if rn_col_idx is None or rev_col_idx is None:
-        st.warning("Please enter valid RN and REV column numbers to continue.")
-        st.stop()
     for uploaded_file in uploaded_files:
         xls = pd.ExcelFile(uploaded_file)
         file_name = os.path.splitext(uploaded_file.name)[0]
@@ -105,22 +94,4 @@ if uploaded_files:
         final_df = pd.DataFrame(compiled_data)
         base_cols = ['filename', 'date']
         segment_cols = [f"{seg}_{suffix}" for seg in segment_order for suffix in ('RN', 'REV') if f"{seg}_{suffix}" in final_df.columns]
-        extra_cols = [col for col in final_df.columns if col not in base_cols + segment_cols]
-        final_df = final_df[base_cols + segment_cols + extra_cols]
-
-        final_df['date'] = pd.to_datetime(final_df['date'], format="%d/%m/%Y")
-        final_df = final_df.sort_values(by=['filename', 'date']).reset_index(drop=True)
-        final_df['date'] = final_df['date'].dt.strftime("%d/%m/%Y")
-
-        st.success("✅ Data extracted successfully!")
-        st.dataframe(final_df)
-
-        csv = final_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download Combined CSV",
-            data=csv,
-            file_name="combined_rn_rev_data.csv",
-            mime="text/csv"
-        )
-else:
-    st.info("Please upload one or more XLSX files to begin extraction.")
+        extra_cols = [col for c
