@@ -126,22 +126,19 @@ if uploaded_files:
                                 compiled_data.append(base_row_copy)
                             continue
 
-                    for label, mode, r_idx, c_idx, dtype, r_start, r_end in parsed_fields:
-                        if mode == "Single Cell":
-                            try:
-                                base_row[label] = df.iat[r_idx, c_idx]
-                            except:
-                                base_row[label] = None
-                        else:
-                            for row in range(r_start - 1, r_end):
-                                row_data = base_row.copy()
-                                try:
-                                    row_data[label] = df.iat[row, c_idx]
-                                except:
-                                    row_data[label] = None
-                                compiled_data.append(row_data)
-                    if not any(f[1] == "Column Range" for f in parsed_fields):
-                        compiled_data.append(base_row)
+                    max_start = max([pf[5] for pf in parsed_fields if pf[1] == "Column Range"] + [1])
+max_end = max([pf[6] for pf in parsed_fields if pf[1] == "Column Range"] + [2])
+for row in range(max_start - 1, max_end):
+    row_data = base_row.copy()
+    for label, mode, r_idx, c_idx, dtype, r_start, r_end in parsed_fields:
+        try:
+            if mode == "Single Cell":
+                row_data[label] = df.iat[r_idx, c_idx]
+            else:
+                row_data[label] = df.iat[row, c_idx]
+        except:
+            row_data[label] = None
+    compiled_data.append(row_data)
 
                 except Exception as e:
                     st.warning(f"Could not process sheet {sheet_name} in {file_name}: {e}")
