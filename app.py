@@ -56,6 +56,8 @@ if uploaded_files:
         with st.expander(f"Field {i+1}"):
             label = st.text_input(f"Field name {i+1}", key=f"label_{i}")
             field_mode = st.selectbox(f"Mode for {label}", ["Single Cell", "Column Range"], key=f"mode_{i}")
+            field_scope = st.selectbox(f"Is {label} present in all sheets or only some?", ["All sheets", "Some sheets"], key=f"scope_{i}")
+            aggregation_key = st.text_input(f"If you want to aggregate {label}, enter the common field to group by (optional)", key=f"aggby_{i}")
 
             if field_mode == "Single Cell":
                 cell_ref = st.text_input(f"Excel-style cell (e.g., E25) for {label}", key=f"cell_{i}")
@@ -68,16 +70,16 @@ if uploaded_files:
                 cell_ref = column_letter
 
             dtype = st.selectbox(f"Data type for {label}", ["number", "text", "date"], key=f"dtype_{i}")
-            user_fields.append((label, field_mode, cell_ref, dtype, row_start, row_end, until_end))
+            user_fields.append((label, field_mode, cell_ref, dtype, row_start, row_end, until_end, field_scope, aggregation_key))
 
     parsed_fields = []
-    for label, mode, ref, dtype, row_start, row_end, until_end in user_fields:
+    for label, mode, ref, dtype, row_start, row_end, until_end, scope, aggby in user_fields:
         if mode == "Single Cell":
             row_idx, col_idx = cell_to_indices(ref)
-            parsed_fields.append((label, mode, row_idx, col_idx, dtype, None, None, until_end))
+            parsed_fields.append((label, mode, row_idx, col_idx, dtype, None, None, until_end, scope, aggby))
         else:
             col_idx = cell_to_indices(ref + "1")[1] if ref else None
-            parsed_fields.append((label, mode, None, col_idx, dtype, row_start, row_end, until_end))
+            parsed_fields.append((label, mode, None, col_idx, dtype, row_start, row_end, until_end, scope, aggby))
 
     month_mapping = {
         'Janvier': '01/01', 'Fevrier': '01/02', 'Mars': '01/03', 'Avril': '01/04',
@@ -122,7 +124,7 @@ if uploaded_files:
                                 date_col = cell_to_indices(date_col_letter + "1")[1]
                                 row_data['date'] = str(df.iat[row, date_col])
 
-                        for label, mode, r_idx, c_idx, dtype, r_start, r_end, until_end in parsed_fields:
+                        for label, mode, r_idx, c_idx, dtype, r_start, r_end, until_end, scope, aggby in parsed_fields:
                             try:
                                 if mode == "Single Cell":
                                     row_data[label] = df.iat[r_idx, c_idx]
