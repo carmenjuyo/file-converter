@@ -22,7 +22,7 @@ if uploaded_files:
 
     spread_type = None
     date_source = None
-    selected_year = None
+    selected_years = []
     date_cell_input = None
 
     all_sheet_options = {}
@@ -46,7 +46,7 @@ if uploaded_files:
                 date_cell_input = st.text_input("Enter the Excel-style cell that contains the date (e.g., B2)", value="B2")
 
         years = [str(y) for y in range(2023, 2031)]
-        selected_year = st.selectbox("Step 3: Select year to extract", options=years)
+        selected_years = st.multiselect("Step 3: Select year(s) to extract", options=years, default=[years[0]])
 
     st.markdown("#### Step 4: Define the data fields you want to extract")
     num_fields = st.number_input("How many fields do you want to extract?", min_value=1, max_value=10, value=2, step=1)
@@ -74,7 +74,7 @@ if uploaded_files:
     for label, mode, ref, dtype, row_start, row_end, until_end in user_fields:
         if mode == "Single Cell":
             row_idx, col_idx = cell_to_indices(ref)
-            parsed_fields.append((label, mode, row_idx, col_idx, dtype, None, None))
+            parsed_fields.append((label, mode, row_idx, col_idx, dtype, None, None, until_end))
         else:
             col_idx = cell_to_indices(ref + "1")[1] if ref else None
             parsed_fields.append((label, mode, None, col_idx, dtype, row_start, row_end, until_end))
@@ -106,25 +106,33 @@ if uploaded_files:
                             if date_source == "From sheet name":
                                 for month_label, month_day in month_mapping.items():
                                     if month_label.lower() in sheet_name.lower():
-                                        base_row['date'] = f"{month_day}/{selected_year}"
+                                        for selected_year in selected_years:
+                                            row_data = base_row.copy()
+                                            row_data['date'] = f"{month_day}/{selected_year}"
+                                            compiled_data.append(row_data)
                                         break
                             elif date_source == "From a specific cell in each sheet":
                                 row_idx, col_idx = cell_to_indices(date_cell_input)
-                                base_row['date'] = str(df.iat[row_idx, col_idx])
+                                for selected_year in selected_years:
+                                    base_row['date'] = str(df.iat[row_idx, col_idx])
+
                         elif spread_type == "Yearly (one sheet for full year)":
                             date_col = cell_to_indices(date_col_letter + "1")[1]
                             for row in range(date_row_start - 1, df.shape[0]):
-                                base_row_copy = base_row.copy()
-                                base_row_copy['date'] = str(df.iat[row, date_col])
+                                date_val = str(df.iat[row, date_col])
+                                if not any(str(yr) in date_val for yr in selected_years):
+                                    continue
+                                row_data = base_row.copy()
+                                row_data['date'] = date_val
                                 for label, mode, r_idx, c_idx, dtype, r_start, r_end, until_end in parsed_fields:
                                     try:
                                         if mode == "Single Cell":
-                                            base_row_copy[label] = df.iat[r_idx, c_idx]
+                                            row_data[label] = df.iat[r_idx, c_idx]
                                         else:
-                                            base_row_copy[label] = df.iat[row, c_idx]
+                                            row_data[label] = df.iat[row, c_idx]
                                     except:
-                                        base_row_copy[label] = None
-                                compiled_data.append(base_row_copy)
+                                        row_data[label] = None
+                                compiled_data.append(row_data)
                             continue
 
                     max_start = max([pf[5] for pf in parsed_fields if pf[1] == "Column Range" and pf[5] is not None] + [1])
