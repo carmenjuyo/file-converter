@@ -3,18 +3,15 @@ import pandas as pd
 import os
 
 st.set_page_config(page_title="Multi-File RN & REV Extractor", layout="wide")
-st.title("📊 Extract RN & REV from Multiple XLSX Files")
+st.title("📊 Multi-File RN & REV Extractor")
 
-# Year range
-years = list(range(2023, 2031))
-selected_year = st.sidebar.selectbox("Select year to extract", options=[str(y) for y in years])
+# Step 1: Select year
+years = [str(y) for y in range(2023, 2031)]
+selected_year = st.selectbox("Step 1: Select year to extract", options=years)
 
-# RN and REV column inputs for all years (can be empty)
-rn_cols = {}
-rev_cols = {}
-for y in years:
-    rn_cols[y] = st.sidebar.text_input(f"{y} RN column (1-based)", value="", key=f"rn_{y}")
-    rev_cols[y] = st.sidebar.text_input(f"{y} REV column (1-based)", value="", key=f"rev_{y}")
+# Step 2: Input RN and REV columns for selected year
+rn_col_input = st.text_input(f"Step 2: Enter RN column number for {selected_year} (1-based)", value="")
+rev_col_input = st.text_input(f"Step 2: Enter REV column number for {selected_year} (1-based)", value="")
 
 def to_col_idx(value):
     try:
@@ -23,18 +20,23 @@ def to_col_idx(value):
             raise ValueError
         return idx
     except:
-        return None  # invalid or empty input
+        return None
 
-rn_idx = to_col_idx(rn_cols[int(selected_year)])
-rev_idx = to_col_idx(rev_cols[int(selected_year)])
+rn_col_idx = to_col_idx(rn_col_input)
+rev_col_idx = to_col_idx(rev_col_input)
 
-uploaded_files = st.file_uploader("Upload one or more .xlsx files", type="xlsx", accept_multiple_files=True)
+if rn_col_idx is None or rev_col_idx is None:
+    st.warning("Please enter valid RN and REV column numbers to continue.")
+    st.stop()
 
+# Month mapping for sheet names to dates
 month_mapping = {
     'Janvier': '01/01', 'Fevrier': '01/02', 'Mars': '01/03', 'Avril': '01/04',
     'Mai': '01/05', 'Juin': '01/06', 'Juillet': '01/07', 'Aout': '01/08',
     'Septembre': '01/09', 'Octobre': '01/10', 'Novembre': '01/11', 'Decembre': '01/12'
 }
+
+uploaded_files = st.file_uploader("Step 3: Upload one or more .xlsx files", type="xlsx", accept_multiple_files=True)
 
 compiled_data = []
 segment_order = []
@@ -47,7 +49,8 @@ if uploaded_files:
         st.markdown(f"### Sheets in {uploaded_file.name}")
         selected_sheets = []
         for sheet in xls.sheet_names:
-            if st.checkbox(f"{sheet} (from {uploaded_file.name})", value=True, key=f"{file_name}_{sheet}"):
+            checked = st.checkbox(f"{sheet} (from {uploaded_file.name})", value=True, key=f"{file_name}_{sheet}")
+            if checked:
                 selected_sheets.append(sheet)
 
         for sheet_name in selected_sheets:
@@ -65,7 +68,7 @@ if uploaded_files:
                         if seg not in segment_order:
                             segment_order.append(seg)
 
-                    existing_keys = set().union(*[row.keys() for row in compiled_data])
+                    existing_keys = set().union(*[row.keys() for row in compiled_data]) if compiled_data else set()
                     for seg in new_segments:
                         if f"{seg}_RN" not in existing_keys or f"{seg}_REV" not in existing_keys:
                             for row in compiled_data:
@@ -73,16 +76,12 @@ if uploaded_files:
                                 row.setdefault(f"{seg}_REV", 0.0)
                     segments = list(new_segments)
 
-                    if rn_idx is None or rev_idx is None:
-                        st.warning(f"RN or REV column not defined for year {selected_year}, skipping extraction.")
-                        continue
-
                     row = {'filename': file_name, 'date': f"{month_day}/{selected_year}"}
                     for segment in segments:
                         try:
                             seg_row = df[df.iloc[:, 0].astype(str).str.strip() == segment]
-                            row[f'{segment}_RN'] = float(seg_row.iloc[0, rn_idx])
-                            row[f'{segment}_REV'] = float(seg_row.iloc[0, rev_idx])
+                            row[f'{segment}_RN'] = float(seg_row.iloc[0, rn_col_idx])
+                            row[f'{segment}_REV'] = float(seg_row.iloc[0, rev_col_idx])
                         except:
                             row[f'{segment}_RN'] = 0.0
                             row[f'{segment}_REV'] = 0.0
@@ -111,5 +110,5 @@ if uploaded_files:
             file_name="combined_rn_rev_data.csv",
             mime="text/csv"
         )
-    else:
-        st.warning("⚠️ No data extracted — please check your inputs and selections.")
+else:
+    st.info("Please upload one or more XLSX files to begin extraction.")
